@@ -17,7 +17,7 @@ st.set_page_config(page_title="MathShift", page_icon="🔢", layout="wide")
 st.title("MathShift - Decomposing problems into logical components")
 
 # Get API key from environment
-groq_api_key = os.getenv("GROQ_API_KEY")
+groq_api_key = st.secrets("GROQ_API_KEY")
 
 # Initialize the language model
 llm = ChatGroq(model="llama3-70b-8192", groq_api_key=groq_api_key)
