@@ -8,41 +8,43 @@ from langchain.agents import Tool, initialize_agent
 from dotenv import load_dotenv
 from langchain.callbacks import StreamlitCallbackHandler
 import os
+
+# Load environment variables
 load_dotenv()
 
 # Set up the Streamlit app
-st.set_page_config(page_title="MathShift", page_icon=":guardsman:", layout="wide")
+st.set_page_config(page_title="MathShift", page_icon="🔢", layout="wide")
 st.title("MathShift - Decomposing problems into logical components")
 
-
+# Get API key from environment
 groq_api_key = os.getenv("GROQ_API_KEY")
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=groq_api_key)
+# Initialize the language model
+llm = ChatGroq(model="llama3-70b-8192", groq_api_key=groq_api_key)
 
-
-# INitializing the tools
-
+# Initialize Wikipedia tool
 wikipedia_wrapper = WikipediaAPIWrapper()
 wikipedia_tool = Tool(
-    name = "Wikipedia",
+    name="Wikipedia",
     func=wikipedia_wrapper.run,
-    description="A tool for searching the internet to find the various info on the topics mentioned"
+    description="Useful for searching general information."
 )
 
-# Initialize the math tool
-
+# Initialize math tool
 math_chain = LLMMathChain.from_llm(llm=llm)
-
 calculator = Tool(
-    name = "Calculator",
+    name="Calculator",
     func=math_chain.run,
-    description="A tool for answering math related questions. Only input mathematical expressions need to be provided"
+    description="Solves math expressions step by step."
 )
 
+# Reasoning tool using a prompt template
 prompt = """
 You are an agent tasked with solving the user's mathematical question. 
 Logically arrive at the solution and provide a detailed explanation, presented point-wise.
+
 Question: {question}
+
 Answer:
 """
 
@@ -51,46 +53,51 @@ prompt_template = PromptTemplate(
     template=prompt
 )
 
-# Combine all the tools into chain
-
-chain = LLMChain(llm=llm,prompt = prompt_template)
-
-# To add the reasoning inside this
-
+reasoning_chain = LLMChain(llm=llm, prompt=prompt_template)
 reasoning_tool = Tool(
-    name = "Reasoning",
-    func = chain.run,
-    description = "A tool for answering logic based and reasoning questions"
+    name="Reasoning",
+    func=reasoning_chain.run,
+    description="Handles logic and reasoning questions."
 )
 
+# Initialize the agent with tools
 assistant_agent = initialize_agent(
-    tools = [wikipedia_tool, calculator, reasoning_tool],
-    llm = llm,
-    agent = AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    verbose = False,
+    tools=[wikipedia_tool, calculator, reasoning_tool],
+    llm=llm,
+    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    verbose=False,
     handle_parsing_errors=True
 )
 
+# Set up chat session state
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [
-        {"role":"assistant","content":"Hello! I am your math assistant. How can I help you today?"}
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! I am your math assistant. How can I help you today?"}
     ]
 
+# Display chat history
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-
+# Input area for new question
 question = st.text_area("Ask your math question here...")
 
 if st.button("Find my Answer"):
     if question:
-        with st.spinner("Generate Response...."):
-            st.session_state.messages.append({"role":"user","content":question})
+        with st.spinner("Generating Response..."):
+            st.session_state.messages.append({"role": "user", "content": question})
             st.chat_message("user").write(question)
-            st_cb = StreamlitCallbackHandler(st.container(),expand_new_thoughts=False)
-            response = assistant_agent.run(st.session_state.messages,callbacks = [st_cb])
-            st.session_state.messages.append({"role":"assistant","content":response})
-            st.write('###Response')
-            st.success(response)
+            
+            # Streamlit callback for LangChain agent
+            st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
+            
+            try:
+                # IMPORTANT: Pass the question string, not the whole message list
+                response = assistant_agent.run(question, callbacks=[st_cb])
+            except Exception as e:
+                response = f"Error: {e}"
+
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.chat_message("assistant").write(response)
     else:
-        st.error("Please enter a question")
+        st.error("Please enter a question.")
